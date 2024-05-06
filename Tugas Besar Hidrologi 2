@@ -1,0 +1,144 @@
+/*************************************************************
+
+  This is a simple demo of sending and receiving some data.
+  Be sure to check out other examples!
+ *************************************************************/
+
+/* Fill-in information from Blynk Device Info here */
+#define BLYNK_TEMPLATE_ID           "TMPL6CG1TEcQ5"
+#define BLYNK_TEMPLATE_NAME         "Quickstart Template"
+#define BLYNK_AUTH_TOKEN            "L1_t-D3qFx1S3GYzR5LCgbtFoGFXTQC9"
+
+/* Comment this out to disable prints and save space */
+#define BLYNK_PRINT Serial
+
+
+#include <WiFi.h>
+#include <WiFiClient.h>
+#include <BlynkSimpleEsp32.h>
+
+// Your WiFi credentials.
+// Set password to "" for open networks.
+char ssid[] = "4G-UFI-8E20";
+char pass[] = "1234567890";
+
+BlynkTimer timer;
+
+// This function is called every time the Virtual Pin 0 state changes
+BLYNK_WRITE(V0)
+{
+  // Set incoming value from pin V0 to a variable
+  int value = param.asInt();
+
+  // Update state
+  Blynk.virtualWrite(V1, value);
+}
+
+// This function is called every time the device is connected to the Blynk.Cloud
+BLYNK_CONNECTED()
+{
+  // Change Web Link Button message to "Congratulations!"
+  Blynk.setProperty(V3, "offImageUrl", "https://static-image.nyc3.cdn.digitaloceanspaces.com/general/fte/congratulations.png");
+  Blynk.setProperty(V3, "onImageUrl",  "https://static-image.nyc3.cdn.digitaloceanspaces.com/general/fte/congratulations_pressed.png");
+  Blynk.setProperty(V3, "url", "https://docs.blynk.io/en/getting-started/what-do-i-need-to-blynk/how-quickstart-device-was-made");
+}
+
+// This function sends Arduino's uptime every second to Virtual Pin 2.
+void myTimerEvent()
+{
+  // You can send any value at any time.
+  // Please don't send more that 10 values per second.
+  Blynk.virtualWrite(V2, millis() / 1000);
+}
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#include <Wire.h> 
+#include <Arduino.h>
+#include <LiquidCrystal_I2C.h>
+LiquidCrystal_I2C lcd(0x3F, 16, 2); // set the LCD address to 0x27 for a 16 chars and 2 line display
+
+
+const int TRIG_PIN=16; //transmitting U-Wave by digital voltage through GPIO 4
+const int ECHO_PIN=17; //Triggering digital voltage upon receiving U-Wave echo through GPIO 2
+const int RELAY=12; //assign an variable at GPIO 12 for relay control
+const int AREA= 980; //surface area of the tank {cm^2}
+const int TANKDIST= 20; //depth of the tank{cm}
+
+void setup()
+{
+  // Debug console
+  Serial.begin(115200);
+
+  Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass);
+  // You can also specify server:
+  //Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass, "blynk.cloud", 80);
+  //Blynk.begin(BLYNK_AUTH_TOKEN, ssid, pass, IPAddress(192,168,1,100), 8080);
+
+  // Setup a function to be called every second
+  timer.setInterval(1000L, myTimerEvent);
+  pinMode(TRIG_PIN, OUTPUT); //setting up GPIO 4 as output
+  pinMode(ECHO_PIN, INPUT); //setting up GPIO 2 as input
+  Serial.begin(9600); //Seting up serial commlink between MCU and PC
+  pinMode(RELAY, OUTPUT); //Setting up the relay control using GPIO 12
+  lcd.init();         // initialize the lcd
+  lcd.backlight();    // Turn on the LCD screen backlight
+}
+
+void loop()
+{
+  Blynk.run();
+  timer.run();
+  // You can inject your own code or combine it with other sketches.
+  // Check other examples on how to communicate with Blynk. Remember
+  // to avoid delay() function!
+digitalWrite(TRIG_PIN, LOW); //still turn off the voltage briefly
+delayMicroseconds(2); //for 2 microsecond
+digitalWrite(TRIG_PIN, HIGH);// Generating 5 V from PIN 13 an sending bursts of U wave through transmitter.
+delayMicroseconds(20); //maintain the burst for about 8 waves
+digitalWrite(TRIG_PIN, LOW);//turn off the voltage
+const unsigned long duration= pulseIn(ECHO_PIN, HIGH); // the duration of HIGH on pin 12.
+int speedvel=370; // sound velocity in the air m/s
+int distance= speedvel*duration/1000/2;//one way travel distance of sound to nearest object [mm]
+int distanceCm=(distance/10)-25; //[cm]
+int volume= AREA*(TANKDIST-distanceCm); // {cm^3}
+int volumeactual= AREA*TANKDIST;
+int persvolume=(float)(TANKDIST-distanceCm)/TANKDIST*100;
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+if(persvolume<0){
+  persvolume=0;
+}
+//loop for if/else conditioning to activate the pump
+if(distanceCm>=3){
+  if(distanceCm>=20){
+  digitalWrite(RELAY, HIGH);}}//conditional for sending 5 volt continuously through GPIO 12 to activate the relay 
+else{
+digitalWrite(RELAY, LOW);}// conditional the opposite way
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+//loop for if/else conditioning for LCD display
+if(duration==0){
+lcd.print("no sensor input");
+Serial.println("no sensor input"); //sending/printing data through serial 
+delay(500); //delay for a second
+lcd.clear(); //clear the old record to be replace by new one
+} 
+else{
+Blynk.virtualWrite(V4, persvolume);
+Blynk.virtualWrite(V0, volume);
+lcd.print("Percentage:"); //display at the LCD
+lcd.print(persvolume);
+lcd.print(" %");
+lcd.setCursor(0,1); //ready to display at LCDs second row
+lcd.print("volume:");
+lcd.print(volume);
+lcd.print(" cm^3"); 
+Serial.print(duration);//sending/printing data through serial port
+Serial.print(",");
+Serial.println(distanceCm);// print the next record at next line
+Serial.println(volume);
+delay(500);
+lcd.clear();//clear the old record to be replace by new one
+}
+
+}
